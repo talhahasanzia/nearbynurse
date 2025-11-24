@@ -1,87 +1,250 @@
-# NearbyNurse — Monorepo
+# NearbyNurse — Full Stack Application
 
-Full‑stack starter: React (Vite) frontend + NestJS backend + PostgreSQL + Supabase Auth. This README merges setup, quick reference, and getting-started guidance into one simple reference focused on running the project locally with Docker.
+Full-stack application with React (Vite) frontend + NestJS backend + PostgreSQL + Supabase Auth. Everything runs in Docker for easy local development.
 
-Status: Docker-based local development supported. Docker Desktop must be running locally to use the instructions below.
+**Status**: ✅ Fully operational with JWT authentication using HS256
 
 ---
 
-## Quick summary
+## Quick Summary
 
-- Frontend: React + Vite (TypeScript)
-- Backend: NestJS (TypeScript)
-- Database: PostgreSQL (container)
-- Auth: Supabase Auth (JWT)
-- Dev with Docker: `docker-compose` brings up `db`, `backend`, and `frontend` services
+- **Frontend**: React + Vite + TypeScript + Supabase Auth
+- **Backend**: NestJS + TypeScript + JWT verification
+- **Database**: PostgreSQL 16 (containerized)
+- **Authentication**: Supabase Auth with JWT tokens (HS256)
+- **Deployment**: Docker Compose orchestration
 
-Ports (defaults)
+### Ports
 - Frontend: http://localhost:5173
-- Backend:  http://localhost:3000
-- Postgres: localhost:5432
+- Backend API: http://localhost:3000
+- PostgreSQL: localhost:5432
 
-Requirements
-- Docker Desktop (running)
+### Requirements
+- Docker Desktop (must be running)
 - Docker Compose (bundled with Docker Desktop)
-- (Optional for local non-Docker dev) Node.js >= 20.19 or >= 22.12
+- Node.js >= 20.19 or >= 22.12 (optional, for local development without Docker)
 
 ---
 
-## Quick start — Run everything with Docker (recommended)
+## Quick Start
 
-1. Copy env template files and fill values (Supabase info required for auth):
+### 1. Create Root Environment File
+
+Create `.env` in the project root (required for Docker builds):
 
 ```bash
-cp frontend/.env.example frontend/.env
-cp backend/.env.example backend/.env
-# Edit both files and add your Supabase project URL and ANON key, and confirm DATABASE_URL in backend/.env
-```
-
-Important env vars (examples)
-
-- `frontend/.env` (client must use VITE_ prefix):
-```
+# Root .env file for Docker Compose build args
 VITE_API_URL=http://localhost:3000
-VITE_SUPABASE_URL=https://<project>.supabase.co
-VITE_SUPABASE_ANON_KEY=<anon-key>
+VITE_SUPABASE_URL=https://your-project-id.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
 
-- `backend/.env`:
-```
+### 2. Configure Backend Environment
+
+Create or update `backend/.env`:
+
+```bash
+# Database connection
 DATABASE_URL=postgresql://postgres:password@db:5432/mydb
-SUPABASE_JWKS_URL=https://<project>.supabase.co/auth/v1/keys
+
+# Supabase JWT Secret (IMPORTANT: Not JWKS URL)
+# Get this from: Supabase Dashboard → Settings → API → JWT Settings → JWT Secret
+SUPABASE_JWT_SECRET=your-jwt-secret-from-supabase-dashboard
+
+# Supabase Anon Key (for API calls to Supabase)
+SUPABASE_ANON_KEY=your-supabase-anon-key
+
+# Server configuration
 PORT=3000
 NODE_ENV=development
 ```
 
-2. Build and start the stack (from repo root):
+### 3. Get Your Supabase Credentials
+
+**Required values from Supabase Dashboard:**
+
+1. Go to https://app.supabase.com/project/YOUR_PROJECT_ID/settings/api
+2. Copy these values:
+   - **Project URL**: `https://xxxxx.supabase.co`
+   - **anon public key**: Long JWT token starting with `eyJhbG...`
+   - **JWT Secret**: From JWT Settings section (click eye icon to reveal)
+
+### 4. Update Environment Files
+
+**Root `.env`** (for Docker frontend builds):
+```env
+VITE_API_URL=http://localhost:3000
+VITE_SUPABASE_URL=https://your-project-id.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**`backend/.env`** (for backend JWT verification):
+```env
+DATABASE_URL=postgresql://postgres:password@db:5432/mydb
+SUPABASE_JWT_SECRET=your-super-secret-jwt-token-here
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+PORT=3000
+```
+
+### 5. Start the Application
 
 ```bash
-# Build images and start containers in the foreground
-docker-compose up --build
-
-# OR start in background
+# Build and start all services
 docker-compose up --build -d
-```
 
-3. Verify services are running
-
-```bash
-# list running containers
-docker ps
-
-# check compose status
+# Check status
 docker-compose ps
+
+# View logs
+docker-compose logs -f
 ```
 
-4. Open the apps
-- Frontend: http://localhost:5173
-- Backend:  http://localhost:3000
+### 6. Access the Application
 
-Notes: If the frontend shows a blank screen or Vite fails to start, see the Troubleshooting section below.
+- **Frontend**: http://localhost:5173
+- **Backend**: http://localhost:3000
+- **Test endpoint**: http://localhost:3000/ (should return "Hello World!")
 
 ---
 
-## Rebuild, logs, and debug commands
+## Important: JWT Configuration
+
+### ⚠️ Critical Note About JWT Verification
+
+This application uses **HS256 (HMAC with SHA-256)** for JWT verification, NOT RS256 with JWKS.
+
+**Why?** Supabase signs JWT tokens with HS256, which requires a **JWT Secret** (shared secret), not public/private key pairs (JWKS).
+
+### Configuration Required:
+
+```env
+# ✅ CORRECT - Use JWT Secret
+SUPABASE_JWT_SECRET=your-jwt-secret-from-supabase
+
+# ❌ WRONG - JWKS URL doesn't work with Supabase
+SUPABASE_JWKS_URL=https://project.supabase.co/auth/v1/keys
+```
+
+### How It Works:
+
+1. User signs in → Supabase creates JWT signed with HS256
+2. Frontend receives JWT token
+3. Frontend sends JWT to backend in `Authorization: Bearer <token>` header
+4. Backend verifies JWT using `jwt.verify(token, SECRET, { algorithms: ['HS256'] })`
+5. If valid → Request proceeds; If invalid → 401 Unauthorized
+
+---
+
+## Authentication Flow
+
+### Sign Up New User
+
+1. Open http://localhost:5173
+2. Click "Need an account? Sign Up"
+3. Enter email and password (min 6 characters)
+4. Click "Sign Up"
+5. Check your email for confirmation link
+6. Click confirmation link in email
+
+### Sign In
+
+1. Open http://localhost:5173
+2. Enter your email and password
+3. Click "Sign In"
+4. You should see welcome message with your email
+
+### Test Protected Endpoint
+
+After signing in:
+1. Click "Test Protected Endpoint (/me)" button
+2. Should display your user data in JSON format
+3. This proves JWT authentication is working correctly
+
+---
+
+## Docker Commands
+
+### Rebuild Everything
+
+```bash
+# Stop all containers and remove volumes (clears database)
+docker-compose down -v
+
+# Rebuild all images without cache
+docker-compose build --no-cache
+
+# Start all services
+docker-compose up -d
+```
+
+### Rebuild Specific Service
+
+```bash
+# Rebuild frontend only
+docker-compose up -d --build frontend
+
+# Rebuild backend only
+docker-compose up -d --build backend
+```
+
+### View Logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f frontend
+docker-compose logs -f backend
+docker-compose logs -f db
+
+# Last 50 lines
+docker-compose logs --tail 50 frontend
+```
+
+### Container Management
+
+```bash
+# Check running containers
+docker ps
+
+# Check compose services status
+docker-compose ps
+
+# Restart a service
+docker-compose restart backend
+
+# Stop all services
+docker-compose down
+
+# Stop and remove volumes (clears database)
+docker-compose down -v
+```
+
+---
+
+## API Endpoints
+
+### Public Endpoints
+
+- `GET /` - Health check, returns "Hello World!"
+
+### Protected Endpoints (Require JWT)
+
+- `GET /me` - Returns authenticated user information
+
+**Example:**
+```bash
+# Without token (returns 401)
+curl http://localhost:3000/me
+
+# With token (returns user data)
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" http://localhost:3000/me
+```
+
+---
+
+## Troubleshooting
 
 Rebuild frontend & backend without cache and restart:
 
@@ -121,83 +284,305 @@ docker-compose exec backend sh
 
 ---
 
-## Troubleshooting — common issues
+## Troubleshooting
 
-1) Vite / Node version error (example):
+### Frontend Shows "Loading..." Forever
 
+**Cause**: Browser caching old JavaScript bundle after code changes.
+
+**Solution**:
+```bash
+# 1. Rebuild frontend
+docker-compose up -d --build frontend
+
+# 2. Hard refresh browser
+# Mac: Cmd + Shift + R
+# Windows/Linux: Ctrl + Shift + R
+
+# 3. Or open in incognito/private window
 ```
-You are using Node.js 18.xx. Vite requires Node.js version 20.19+ or 22.12+.
+
+### Backend Returns 500 Error on /me Endpoint
+
+**Cause**: Missing or incorrect `SUPABASE_JWT_SECRET` in `backend/.env`.
+
+**Solution**:
+1. Go to Supabase Dashboard → Settings → API → JWT Settings
+2. Copy the **JWT Secret** (click eye icon to reveal)
+3. Update `backend/.env`:
+   ```env
+   SUPABASE_JWT_SECRET=your-actual-jwt-secret-here
+   ```
+4. Rebuild backend:
+   ```bash
+   docker-compose up -d --build backend
+   ```
+
+### Supabase Warning in Browser Console
+
+**Warning Message**:
+```
+⚠️  Supabase not configured properly!
+URL=https://placeholder.supabase.co
 ```
 
-Cause: Vite or one of its transitive dependencies requires a newer Node runtime than available inside the container image or on your host when running Vite locally.
+**Cause**: Using placeholder values instead of real Supabase credentials.
 
-Fixes:
-- Preferred: Ensure the Dockerfile used to run the frontend uses Node >= 20.19 (or 22.12+). Rebuild images after changing the Dockerfile.
-- Or run Vite locally on your machine with an appropriate Node version (use `nvm` to install):
+**Solution**:
+1. Update root `.env` file with real credentials
+2. Rebuild frontend:
+   ```bash
+   docker-compose up -d --build frontend
+   ```
+3. Hard refresh browser
+
+### Cannot Sign In After Signing Up
+
+**Cause**: Email not confirmed yet.
+
+**Solution**:
+1. Check your email for Supabase confirmation link
+2. Click the confirmation link
+3. Return to http://localhost:5173 and sign in
+4. Or manually confirm in Supabase Dashboard → Authentication → Users
+
+### Database Connection Error
+
+**Error**: `ECONNREFUSED localhost:5432`
+
+**Solution**:
+```bash
+# Check if database is running
+docker-compose ps
+
+# If not running, start it
+docker-compose up -d db
+
+# Check database logs
+docker-compose logs db
+```
+
+### Port Already in Use
+
+**Error**: `Bind for 0.0.0.0:5173 failed: port is already allocated`
+
+**Solution**:
+```bash
+# Find process using the port
+lsof -ti:5173
+
+# Kill the process
+kill -9 $(lsof -ti:5173)
+
+# Or change port in docker-compose.yml
+```
+
+### Clear Database and Start Fresh
 
 ```bash
-nvm install 22 && nvm use 22
+# Stop all containers and remove volumes
+docker-compose down -v
+
+# Rebuild and start
+docker-compose up -d --build
+
+# Note: This deletes all user accounts and data
 ```
 
-Verify inside the running container:
+---
 
-```bash
-docker-compose exec frontend node --version
+## Project Structure
+
+```
+nearbynurse/
+├── .env                          # Root env for Docker build args
+├── docker-compose.yml            # Orchestration config
+├── README.md                     # This file
+│
+├── frontend/                     # React + Vite application
+│   ├── Dockerfile               # Frontend container config
+│   ├── src/
+│   │   ├── App.tsx              # Main app component
+│   │   ├── contexts/
+│   │   │   └── AuthContext.tsx  # Authentication context
+│   │   └── lib/
+│   │       ├── supabase.ts      # Supabase client config
+│   │       └── api.ts           # API client
+│   └── .env                     # Frontend env (for local dev)
+│
+└── backend/                      # NestJS API
+    ├── Dockerfile               # Backend container config
+    ├── src/
+    │   ├── main.ts              # App entry point
+    │   ├── app.module.ts        # Root module
+    │   ├── app.controller.ts    # API endpoints
+    │   └── auth/
+    │       └── supabase-auth.guard.ts  # JWT verification
+    └── .env                     # Backend env (required)
 ```
 
-If you updated Dockerfiles, force rebuild:
+---
+
+## Environment Variables Reference
+
+### Root `.env` (Required for Docker)
+```env
+VITE_API_URL=http://localhost:3000
+VITE_SUPABASE_URL=https://xxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbG...
+```
+
+### `backend/.env` (Required)
+```env
+DATABASE_URL=postgresql://postgres:password@db:5432/mydb
+SUPABASE_JWT_SECRET=your-jwt-secret
+SUPABASE_ANON_KEY=eyJhbG...
+PORT=3000
+NODE_ENV=development
+```
+
+### `frontend/.env` (Optional, for local dev without Docker)
+```env
+VITE_API_URL=http://localhost:3000
+VITE_SUPABASE_URL=https://xxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbG...
+```
+
+---
+
+## Security Notes
+
+### JWT Secret Security
+
+✅ **Safe Practices:**
+- JWT Secret only in `backend/.env` (never in frontend)
+- `.env` files in `.gitignore` (not committed to git)
+- Use HTTPS in production
+- Rotate secrets periodically
+
+❌ **Never Do:**
+- Expose JWT Secret in frontend code
+- Commit secrets to git
+- Log secrets in console
+- Send secrets in API responses
+
+### Supabase Keys
+
+- **anon key**: ✅ Safe to use in frontend (public key with limited permissions)
+- **service_role key**: ❌ Never use in frontend (full access, backend only)
+
+---
+
+## Production Deployment
+
+### Environment Variables
+
+Update production environment files with:
+- Real database connection strings
+- Production Supabase credentials
+- Secure JWT secrets (generate new ones)
+- HTTPS URLs for API and Supabase
+
+### Build for Production
 
 ```bash
-docker-compose build --no-cache frontend
+# Build optimized images
+docker-compose -f docker-compose.prod.yml build
+
+# Use production environment files
+# Never commit production .env files to git
+```
+
+### Security Checklist
+
+- [ ] Use HTTPS for all connections
+- [ ] Set secure JWT secret (min 32 characters)
+- [ ] Enable Supabase Row Level Security (RLS)
+- [ ] Configure CORS properly in backend
+- [ ] Use environment-specific .env files
+- [ ] Enable rate limiting on API
+- [ ] Set up monitoring and logging
+- [ ] Regular security updates for dependencies
+
+---
+
+## Development Workflow
+
+### Making Changes
+
+1. **Frontend changes**: Hot reload works automatically (Vite HMR)
+2. **Backend changes**: Restart backend container
+   ```bash
+   docker-compose restart backend
+   ```
+3. **Database schema changes**: Use migrations or rebuild with `-v` flag
+
+### Adding New API Endpoints
+
+1. Add route in `backend/src/app.controller.ts`
+2. Add `@UseGuards(SupabaseAuthGuard)` for protected routes
+3. Restart backend: `docker-compose restart backend`
+4. Test with curl or frontend
+
+### Testing Authentication
+
+```bash
+# Sign up via UI and get JWT token from browser DevTools
+# Copy the token from Application → Local Storage
+
+# Test protected endpoint
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+     http://localhost:3000/me
+```
+
+---
+
+## Common Commands Quick Reference
+
+```bash
+# Start everything
 docker-compose up -d
+
+# Rebuild and start
+docker-compose up -d --build
+
+# Stop everything
+docker-compose down
+
+# Stop and clear database
+docker-compose down -v
+
+# View logs
+docker-compose logs -f [service]
+
+# Restart service
+docker-compose restart [service]
+
+# Rebuild single service
+docker-compose up -d --build [service]
+
+# Execute command in container
+docker-compose exec [service] sh
 ```
-
-2) Blank frontend screen (page is served but app UI is blank)
-
-Checklist:
-- Open browser DevTools Console for JS errors (syntax error, missing module, runtime exception).
-- Network tab: check that main JS bundles are loading (200) and API calls succeed.
-- Check `docker-compose logs frontend` — Vite should print a line with `Local: http://0.0.0.0:5173/` and `Network: ...` when binding correctly.
-- If running Vite inside Docker, ensure Vite listens on all interfaces. Use `--host 0.0.0.0` or set `HOST=0.0.0.0`.
-- Verify that `VITE_SUPABASE_ANON_KEY` and `VITE_SUPABASE_URL` are present in `frontend/.env`. Missing keys often cause auth-dependent apps to fail at startup.
-
-Quick commands:
-
-```bash
-# show frontend logs
-docker-compose logs -f frontend
-# check index served by Vite
-curl http://localhost:5173/index.html | sed -n '1,120p'
-```
-
-Recommended quick fix for blank screen when using Docker dev server:
-- Add `--host 0.0.0.0` to the `dev` script in `frontend/package.json` so Vite binds to 0.0.0.0 (see "Recommended edits" section below).
 
 ---
 
-## Can I access auth via the frontend UI?
+## Support & Resources
 
-Yes. The frontend uses Supabase client code. If you provide `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `frontend/.env` and the frontend is running, you can sign in from the UI and the app will obtain a Supabase session JWT. That JWT is then sent to protected backend endpoints via the `Authorization: Bearer <JWT>` header.
-
-To test the auth flow quickly:
-1. Start stack with Docker
-2. Open http://localhost:5173 and sign in (or sign up) using the UI supplied in the app
-3. Inspect network requests in DevTools to see the JWT and API calls to `VITE_API_URL`
+- **Supabase Docs**: https://supabase.com/docs
+- **NestJS Docs**: https://docs.nestjs.com
+- **Vite Docs**: https://vitejs.dev
+- **Docker Docs**: https://docs.docker.com
 
 ---
 
-## Recommended (small, optional) edits to make Docker dev smoother
+## License
 
-These are optional changes you may apply to avoid common container binding problems.
+[Your License Here]
 
-1) Bind Vite to all interfaces
-- Edit `frontend/package.json` script `dev` from:
+---
 
-```json
-"dev": "vite"
-```
-
-to:
+**Current Status**: ✅ Fully operational with working authentication system using Supabase JWT (HS256) and protected API endpoints.
 
 ```json
 "dev": "vite --host 0.0.0.0"
