@@ -24,7 +24,9 @@ export class SupabaseAuthGuard implements CanActivate {
     }
 
     if (!this.jwks) {
-      const res = await axios.get(jwksUrl);
+      const anonKey = process.env.SUPABASE_ANON_KEY;
+      const headers = anonKey ? { apikey: anonKey } : {};
+      const res = await axios.get(jwksUrl, { headers });
       this.jwks = res.data.keys;
     }
 

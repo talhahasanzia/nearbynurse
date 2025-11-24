@@ -7,7 +7,15 @@
     <title>frontend</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Add a static fallback message so a blank screen is easier to diagnose when JS fails -->
+    <div id="root">
+      <noscript>
+        JavaScript is required to run this app. Please enable JavaScript in your browser.
+      </noscript>
+      <div id="app-fallback" style="font-family: sans-serif; padding: 2rem; text-align: center;">
+        Loading application… If this message remains visible after the page loads, the JavaScript bundle failed to run. Open the browser DevTools Console for errors.
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

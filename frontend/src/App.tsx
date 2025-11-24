@@ -2,6 +2,7 @@ import { useState } from 'react'
 import './App.css'
 import { useAuth } from './contexts/AuthContext'
 import { api } from './lib/api'
+import { isSupabaseConfigured } from './lib/supabase'
 
 function App() {
   const { user, loading, signIn, signUp, signOut } = useAuth()
@@ -44,6 +45,24 @@ function App() {
   return (
     <div className="container">
       <h1>🏥 NearbyNurse Auth Demo</h1>
+
+      {!isSupabaseConfigured && (
+        <div className="setup-banner">
+          <h3>⚠️ Supabase Not Configured</h3>
+          <p>To enable authentication, you need to set up Supabase:</p>
+          <ol style={{ textAlign: 'left', margin: '1rem auto', maxWidth: '500px' }}>
+            <li>Go to <a href="https://app.supabase.com" target="_blank" rel="noopener noreferrer">app.supabase.com</a></li>
+            <li>Create a new project (takes 2-3 minutes)</li>
+            <li>Go to Settings → API</li>
+            <li>Copy your Project URL and anon public key</li>
+            <li>Update <code>/Users/talhazia/WebstormProjects/nearbynurse/.env</code></li>
+            <li>Run: <code>docker-compose up -d --build frontend</code></li>
+          </ol>
+          <p style={{ fontSize: '0.9rem', marginTop: '1rem' }}>
+            📖 See <strong>SUPABASE-SETUP.md</strong> for detailed instructions
+          </p>
+        </div>
+      )}
 
       {!user ? (
         <div className="auth-form">

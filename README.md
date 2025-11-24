@@ -1,57 +1,51 @@
-# NearbyNurse Monorepo
+# NearbyNurse — Monorepo
 
-Full‑stack starter with React (Vite) + NestJS + PostgreSQL + Supabase Auth, packaged for local Docker dev and easy cloud deployment.
+Full‑stack starter: React (Vite) frontend + NestJS backend + PostgreSQL + Supabase Auth. This README merges setup, quick reference, and getting-started guidance into one simple reference focused on running the project locally with Docker.
 
-## Tech Stack
-Frontend: React 18, Vite, TypeScript, Supabase JS
-Backend: NestJS, TypeScript, Axios, JWT (Supabase JWKS)
-Database: PostgreSQL
-Tooling: Docker / Docker Compose, GitHub Actions (CI), Node.js ≥ 20.19 or ≥ 22.12
+Status: Docker-based local development supported. Docker Desktop must be running locally to use the instructions below.
 
-## Project Structure
-```
-nearbynurse/
-├── frontend/          # React + Vite app
-│   ├── src/
-│   │   ├── contexts/AuthContext.tsx   # Auth state & hooks
-│   │   └── lib/{supabase.ts, api.ts}  # Supabase client & API helper
-│   ├── .env(.example)
-│   └── Dockerfile
-├── backend/           # NestJS API
-│   ├── src/
-│   │   ├── auth/supabase-auth.guard.ts  # JWT validation
-│   │   ├── app.{controller,module,service}.ts
-│   │   └── main.ts
-│   ├── .env(.example)
-│   └── Dockerfile
-├── docker-compose.yml # Dev stack: db + backend + frontend
-├── .github/workflows/{frontend.yml,backend.yml}
-└── README.md          # You are here
-```
+---
 
-## Prerequisites
-- Node.js 20.19+ (or 22.12+) — required by Vite (use nvm if needed)
-- Docker Desktop (optional but recommended)
-- Supabase account & project (for auth)
+## Quick summary
 
-Check versions:
-```
-node --version
-docker --version
+- Frontend: React + Vite (TypeScript)
+- Backend: NestJS (TypeScript)
+- Database: PostgreSQL (container)
+- Auth: Supabase Auth (JWT)
+- Dev with Docker: `docker-compose` brings up `db`, `backend`, and `frontend` services
+
+Ports (defaults)
+- Frontend: http://localhost:5173
+- Backend:  http://localhost:3000
+- Postgres: localhost:5432
+
+Requirements
+- Docker Desktop (running)
+- Docker Compose (bundled with Docker Desktop)
+- (Optional for local non-Docker dev) Node.js >= 20.19 or >= 22.12
+
+---
+
+## Quick start — Run everything with Docker (recommended)
+
+1. Copy env template files and fill values (Supabase info required for auth):
+
+```bash
+cp frontend/.env.example frontend/.env
+cp backend/.env.example backend/.env
+# Edit both files and add your Supabase project URL and ANON key, and confirm DATABASE_URL in backend/.env
 ```
 
-## Environment Variables
-Create `.env` files from provided `.env.example` templates.
+Important env vars (examples)
 
-Frontend `frontend/.env`:
+- `frontend/.env` (client must use VITE_ prefix):
 ```
 VITE_API_URL=http://localhost:3000
 VITE_SUPABASE_URL=https://<project>.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon-key>
 ```
-(Frontend vars must start with VITE_ to be exposed.)
 
-Backend `backend/.env`:
+- `backend/.env`:
 ```
 DATABASE_URL=postgresql://postgres:password@db:5432/mydb
 SUPABASE_JWKS_URL=https://<project>.supabase.co/auth/v1/keys
@@ -59,143 +53,251 @@ PORT=3000
 NODE_ENV=development
 ```
 
-## Quick Start (All Services via Docker)
-```
-# From repo root
+2. Build and start the stack (from repo root):
+
+```bash
+# Build images and start containers in the foreground
 docker-compose up --build
+
+# OR start in background
+docker-compose up --build -d
 ```
-Access:
+
+3. Verify services are running
+
+```bash
+# list running containers
+docker ps
+
+# check compose status
+docker-compose ps
+```
+
+4. Open the apps
 - Frontend: http://localhost:5173
 - Backend:  http://localhost:3000
-- PostgreSQL: localhost:5432
 
-Stop:
+Notes: If the frontend shows a blank screen or Vite fails to start, see the Troubleshooting section below.
+
+---
+
+## Rebuild, logs, and debug commands
+
+Rebuild frontend & backend without cache and restart:
+
+```bash
+docker-compose build --no-cache frontend backend
+docker-compose up --build -d
 ```
+
+Follow logs (all services or a single service):
+
+```bash
+docker-compose logs -f        # all
+docker-compose logs -f frontend
+docker-compose logs -f backend
+docker-compose logs -f db
+```
+
+Health & reachability checks
+
+```bash
+# Frontend should serve index.html (Vite) or static files
+curl -I http://localhost:5173/
+
+# Backend basic check
+curl -v http://localhost:3000/
+
+# Protected endpoint (should 401 without token)
+curl -v http://localhost:3000/me
+```
+
+Exec into containers for troubleshooting
+
+```bash
+docker-compose exec frontend sh    # or ash in Alpine images
+docker-compose exec backend sh
+```
+
+---
+
+## Troubleshooting — common issues
+
+1) Vite / Node version error (example):
+
+```
+You are using Node.js 18.xx. Vite requires Node.js version 20.19+ or 22.12+.
+```
+
+Cause: Vite or one of its transitive dependencies requires a newer Node runtime than available inside the container image or on your host when running Vite locally.
+
+Fixes:
+- Preferred: Ensure the Dockerfile used to run the frontend uses Node >= 20.19 (or 22.12+). Rebuild images after changing the Dockerfile.
+- Or run Vite locally on your machine with an appropriate Node version (use `nvm` to install):
+
+```bash
+nvm install 22 && nvm use 22
+```
+
+Verify inside the running container:
+
+```bash
+docker-compose exec frontend node --version
+```
+
+If you updated Dockerfiles, force rebuild:
+
+```bash
+docker-compose build --no-cache frontend
+docker-compose up -d
+```
+
+2) Blank frontend screen (page is served but app UI is blank)
+
+Checklist:
+- Open browser DevTools Console for JS errors (syntax error, missing module, runtime exception).
+- Network tab: check that main JS bundles are loading (200) and API calls succeed.
+- Check `docker-compose logs frontend` — Vite should print a line with `Local: http://0.0.0.0:5173/` and `Network: ...` when binding correctly.
+- If running Vite inside Docker, ensure Vite listens on all interfaces. Use `--host 0.0.0.0` or set `HOST=0.0.0.0`.
+- Verify that `VITE_SUPABASE_ANON_KEY` and `VITE_SUPABASE_URL` are present in `frontend/.env`. Missing keys often cause auth-dependent apps to fail at startup.
+
+Quick commands:
+
+```bash
+# show frontend logs
+docker-compose logs -f frontend
+# check index served by Vite
+curl http://localhost:5173/index.html | sed -n '1,120p'
+```
+
+Recommended quick fix for blank screen when using Docker dev server:
+- Add `--host 0.0.0.0` to the `dev` script in `frontend/package.json` so Vite binds to 0.0.0.0 (see "Recommended edits" section below).
+
+---
+
+## Can I access auth via the frontend UI?
+
+Yes. The frontend uses Supabase client code. If you provide `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `frontend/.env` and the frontend is running, you can sign in from the UI and the app will obtain a Supabase session JWT. That JWT is then sent to protected backend endpoints via the `Authorization: Bearer <JWT>` header.
+
+To test the auth flow quickly:
+1. Start stack with Docker
+2. Open http://localhost:5173 and sign in (or sign up) using the UI supplied in the app
+3. Inspect network requests in DevTools to see the JWT and API calls to `VITE_API_URL`
+
+---
+
+## Recommended (small, optional) edits to make Docker dev smoother
+
+These are optional changes you may apply to avoid common container binding problems.
+
+1) Bind Vite to all interfaces
+- Edit `frontend/package.json` script `dev` from:
+
+```json
+"dev": "vite"
+```
+
+to:
+
+```json
+"dev": "vite --host 0.0.0.0"
+```
+
+2) Ensure frontend Dockerfile uses a Node image with a compatible Node version (>= 20.19 or 22.12)
+- Example base line in `frontend/Dockerfile`:
+
+```
+FROM node:20.19.0-alpine
+```
+
+Or use Node 22 if you prefer:
+
+```
+FROM node:22.12.0-alpine
+```
+
+After changing the Dockerfile, rebuild the frontend image:
+
+```bash
+docker-compose build --no-cache frontend
+docker-compose up -d
+```
+
+These edits are small and safe. If you want, I can apply them for you (frontend `package.json` and `frontend/Dockerfile`) and rebuild images. Tell me if you'd like me to make those edits now.
+
+---
+
+## Local development (without Docker)
+
+If you prefer to run services directly on your machine:
+
+Backend
+
+```bash
+cd backend
+npm install
+npm run start:dev    # starts NestJS on port 3000
+```
+
+Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev          # starts Vite on 5173
+```
+
+Note: Ensure your Node version locally meets Vite's engine requirement (>=20.19 or >=22.12).
+
+---
+
+## Quick reference / cheat sheet
+
+Start everything with Docker (foreground):
+
+```bash
+docker-compose up --build
+```
+
+Start detached:
+
+```bash
+docker-compose up --build -d
+```
+
+Stop and remove containers:
+
+```bash
 docker-compose down
 ```
 
-## Local Development (Without docker-compose)
-Terminal 1 – Database (optional if you already have Postgres):
-```
-docker run --name postgres-dev \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_DB=mydb \
-  -p 5432:5432 -d postgres:16
-```
-Terminal 2 – Backend:
-```
-cd backend
-npm install
-npm run start:dev   # http://localhost:3000
-```
-Terminal 3 – Frontend:
-```
-cd frontend
-npm install
-npm run dev         # http://localhost:5173
+Rebuild frontend only:
+
+```bash
+docker-compose build --no-cache frontend
 ```
 
-## Root Helper Scripts
-```
-npm run dev:frontend    # Frontend dev server
-npm run dev:backend     # Backend dev server
-npm run build:frontend  # Production build (frontend)
-npm run build:backend   # Production build (backend)
-npm run docker:up       # docker-compose up --build
-npm run docker:down     # docker-compose down
-npm run install:all     # Install all dependencies
+View frontend logs:
+
+```bash
+docker-compose logs -f frontend
 ```
 
-## Frontend Scripts
-```
-npm run dev
-npm run build
-npm run preview
-npm run lint
-```
-## Backend Scripts
-```
-npm run start            # Prod
-npm run start:dev        # Dev watch
-npm run start:debug
-npm run build
-npm run test             # Unit tests
-npm run test:e2e         # E2E tests
+Check that frontend serves index:
+
+```bash
+curl -I http://localhost:5173/
 ```
 
-## Authentication Flow (Supabase)
-1. User signs in via Supabase (AuthContext handles session).
-2. JWT retrieved from Supabase session.
-3. Requests to protected API endpoints send `Authorization: Bearer <JWT>`.
-4. Backend `SupabaseAuthGuard` fetches JWKS from Supabase and validates token.
+---
 
-Protected endpoint example:
-```ts
-@UseGuards(SupabaseAuthGuard)
-@Get('me')
-getProfile() { return { msg: 'Authenticated!' }; }
-```
+## Contributing & next steps
 
-## Test the Setup
-Backend health:
-```
-curl http://localhost:3000
-# → "Hello World!"
-```
-Unauthorized check:
-```
-curl http://localhost:3000/me   # → 401 without token
-```
+- Prefer small, focused PRs
+- Add tests for new backend APIs and UI flows
+- Consider adding a `docker-compose.override.yml` for a hot-reload dev workflow that mounts local code into the container
 
-## Troubleshooting
-Node version error (Vite):
-```
-nvm install 22 && nvm use 22
-```
-Ports in use:
-```
-lsof -ti:3000 | xargs kill -9
-lsof -ti:5173 | xargs kill -9
-```
-Reset Docker stack:
-```
-docker-compose down -v
-docker system prune -a
-docker-compose up --build
-```
-Check Postgres running:
-```
-docker ps | grep postgres
-```
-
-## Common Issues
-Unauthorized errors:
-- Verify Supabase URL/key and JWKS URL in backend `.env`
-- Ensure Authorization header sent by frontend
-Database connection issues:
-- Confirm container running; restart: `docker-compose restart db`
-
-## Next Steps
-1. Add ORM (Prisma / TypeORM) & migrations.
-2. Implement additional API modules & React pages.
-3. Add Swagger/OpenAPI for backend docs.
-4. Extend test coverage (frontend + e2e scenarios).
-5. Set up monitoring (Sentry) & performance analytics.
-
-## Contributing
-- Use feature branches (`feat/your-feature`)
-- Write tests & update docs
-- Conventional commits (feat:, fix:, docs:, chore:)
-- Submit PRs after CI passes
+---
 
 ## License
 MIT
-
-## Quick Reference (Cheat Sheet)
-Start all (Docker): `docker-compose up --build`
-Local dev: backend `npm run start:dev` | frontend `npm run dev`
-Env template: use `.env.example` files, never commit secrets.
-Key files: `frontend/src/contexts/AuthContext.tsx`, `frontend/src/lib/{api.ts,supabase.ts}`, `backend/src/auth/supabase-auth.guard.ts`.
-
-You're ready to build 🚀
-
