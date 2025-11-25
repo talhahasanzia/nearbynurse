@@ -62,57 +62,50 @@ You will typically create TWO clients:
 1. Frontend SPA public client (uses Authorization Code Flow + PKCE)
 2. (Optional) Backend bearer-only or direct-grant client (only if you want password grant or service-to-service calls)
 
-### A) Frontend Client (recommended)
+### A) Frontend Client (for Custom Login UI - Password Grant)
+**IMPORTANT:** Since you're using custom login/registration pages (not Keycloak redirects), you need Direct Access Grants enabled.
+
+**Steps:**
+1. Go to **Clients** → Click **Create client**
+
+**General Settings:**
 - **Client ID**: `nearbynurse-frontend`
-- **Client type**: OpenID Connect
-- **Root URL**: `http://localhost:5173` (base URL of the SPA)
-- **Home URL**: `http://localhost:5173/` (where users land after login/logout)
-  - If Keycloak shows separate fields for these, use the same base.
+- **Name**: `NearbyNurse Frontend`
+- **Description**: `Public client for custom login UI`
 - Click **Next**
 
-**Capability config**:
-- ✅ Standard flow (Authorization Code Flow)
-- ✅ Proof Key for Code Exchange (PKCE) auto-enabled
-- ❌ Direct access grants (OFF for pure SPA; only enable if you explicitly use password grant)
-- ❌ Client authentication (OFF – public client)
+**Capability config:**
+- ✅ **Direct access grants** (ON) ← **REQUIRED for password grant**
+- ❌ **Standard flow** (OFF - we're not using Keycloak redirects)
+- ❌ **Implicit flow** (OFF)
+- ❌ **Client authentication** (OFF - public client)
+- ❌ **Authorization** (OFF)
 - Click **Next**
 
-**Login settings**:
-- **Valid redirect URIs**: `http://localhost:5173/*`
+**Login settings:**
+- **Root URL**: `http://localhost:5173`
+- **Home URL**: `http://localhost:5173/`
+- **Valid redirect URIs**: `http://localhost:5173/*` (can add for future OAuth flows)
 - **Valid post logout redirect URIs**: `http://localhost:5173/*`
-- **Web origins**: `http://localhost:5173`
-- Save
+- **Web origins**: `http://localhost:5173` (for CORS)
+- Click **Save**
 
-Update frontend `.env`:
-```
-VITE_KEYCLOAK_CLIENT_ID=nearbynurse-frontend
-```
+**Why "Direct access grants"?**
+Your app uses custom login forms that send username/password to the backend, which then requests tokens from Keycloak using the Resource Owner Password Credentials (ROPC) grant. This requires "Direct access grants" to be enabled.
 
-### B) Backend Client (optional – only if using password grant or service calls)
-If you want to test with `curl` using password grant, create a second client:
-- **Client ID**: `nearbynurse-backend`
-- **Client type**: OpenID Connect
-- **Root URL**: (leave blank OR `http://localhost:3000` if you plan redirect flows)
-- **Home URL**: leave blank
-- Click **Next**
+**Already created the client?** Just enable it:
+1. Go to **Clients** → `nearbynurse-frontend`
+2. **Capability config** tab → Enable ✅ **Direct access grants**
+3. Click **Save**
 
-**Capability config**:
-- ✅ Direct access grants (ON – enables password grant for curl testing)
-- ❌ Standard flow (OFF if you are not doing browser redirects for backend client)
-- ✅ Client authentication (ON if you want a secret; OFF if public password grant is acceptable)
-- ❌ Authorization (OFF unless using Keycloak authorization services)
-- Click **Next**
+### That's It - One Client Only!
 
-**Login settings** (only needed if you enabled Standard flow):
-- **Valid redirect URIs**: `http://localhost:3000/*` (omit if standard flow OFF)
-- **Web origins**: `http://localhost:3000` (omit if standard flow OFF)
-- Save
+You **only need** the `nearbynurse-frontend` client above. The backend doesn't need its own client because:
+- Registration uses Keycloak Admin API (admin credentials)
+- Login uses the frontend client with password grant
+- Protected endpoints just validate JWT tokens (no client needed)
 
-If you keep using the curl examples with password grant:
-- Ensure `nearbynurse-backend` has Direct access grants enabled.
-- Use `client_id=nearbynurse-backend` in the token request (as shown below).
-
-> NOTE: For most frontend → backend JWT validation cases, you ONLY need the frontend client. The backend just validates tokens; no separate Keycloak client required unless you need password grant or service account flows.
+**Do NOT create a second "backend" client** - it's unnecessary for this setup.
 
 ---
 

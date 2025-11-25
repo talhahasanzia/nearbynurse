@@ -23,7 +23,12 @@ export interface TokenResponse {
 
 @Injectable()
 export class AuthService {
-  private readonly keycloakUrl = process.env.KEYCLOAK_ISSUER || 'http://localhost:8080/realms/master';
+  // Use internal Docker URL for API calls, falls back to localhost for local dev
+  private readonly keycloakUrl = process.env.KEYCLOAK_URL
+    ? `${process.env.KEYCLOAK_URL}/realms/master`
+    : (process.env.KEYCLOAK_ISSUER || 'http://localhost:8080/realms/master');
+
+  private readonly keycloakBaseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8080';
   private readonly clientId = process.env.KEYCLOAK_CLIENT_ID || 'nearbynurse-frontend';
   private readonly adminUsername = process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
   private readonly adminPassword = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
@@ -54,6 +59,14 @@ export class AuthService {
       };
     } catch (error: any) {
       console.error('Keycloak login error:', error.response?.data || error.message);
+
+      // Check for specific Keycloak errors
+      if (error.response?.data?.error === 'invalid_client') {
+        throw new UnauthorizedException(
+          'Keycloak client not configured. Go to http://localhost:8080/admin → Clients → nearbynurse-frontend → Enable "Direct access grants"'
+        );
+      }
+
       throw new UnauthorizedException('Invalid credentials');
     }
   }
@@ -72,7 +85,7 @@ export class AuthService {
 
       // Create user
       const createUserResponse = await axios.post(
-        `${this.keycloakUrl.replace(/\/realms\/.*/, '')}/admin/realms/${realm}/users`,
+        `${this.keycloakBaseUrl}/admin/realms/${realm}/users`,
         {
           username: registerDto.username,
           email: registerDto.email,
@@ -99,7 +112,7 @@ export class AuthService {
 
       // Set password
       await axios.put(
-        `${this.keycloakUrl.replace(/\/realms\/.*/, '')}/admin/realms/${realm}/users/${userId}/reset-password`,
+        `${this.keycloakBaseUrl}/admin/realms/${realm}/users/${userId}/reset-password`,
         {
           type: 'password',
           value: registerDto.password,

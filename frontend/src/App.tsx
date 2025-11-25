@@ -159,7 +159,7 @@ function AdminPage() {
 
 // Main App Component
 function App() {
-  const { isLoading, isAuthenticated, user, login, logout, register } = useAuth();
+  const { isLoading, isAuthenticated, user, logout } = useAuth();
 
   if (isLoading) {
     return (

@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 const LoginPage: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
-  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -114,4 +113,3 @@ const LoginPage: React.FC = () => {
 };
 
 export default LoginPage;
-
