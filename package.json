@@ -1,7 +1,7 @@
 {
   "name": "nearbynurse-monorepo",
   "version": "1.0.0",
-  "description": "Full-stack monorepo with React, NestJS, PostgreSQL, and Supabase",
+  "description": "Full-stack monorepo with React, NestJS, PostgreSQL",
   "private": true,
   "scripts": {
     "dev:frontend": "cd frontend && npm run dev",
@@ -16,11 +16,9 @@
     "react",
     "nestjs",
     "postgresql",
-    "supabase",
     "docker",
     "monorepo"
   ],
   "author": "",
   "license": "MIT"
 }
-

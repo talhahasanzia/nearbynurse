@@ -1,129 +1,264 @@
-import { useState } from 'react'
-import './App.css'
-import { useAuth } from './contexts/AuthContext'
+import { Routes, Route, Link } from 'react-router-dom';
+import { useAuth } from './hooks/useAuth';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import './App.css';
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
 import { api } from './lib/api'
-import { isSupabaseConfigured } from './lib/supabase'
+import { useState } from 'react';
 
-function App() {
-  const { user, loading, signIn, signUp, signOut } = useAuth()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [isSignUp, setIsSignUp] = useState(false)
-  const [error, setError] = useState('')
-  const [protectedData, setProtectedData] = useState<any>(null)
-
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    try {
-      if (isSignUp) {
-        await signUp(email, password)
-        alert('Check your email to confirm your account!')
-      } else {
-        await signIn(email, password)
-      }
-      setEmail('')
-      setPassword('')
-    } catch (err: any) {
-      setError(err.message || 'Authentication failed')
-    }
-  }
-
-  const testProtectedEndpoint = async () => {
-    try {
-      const data = await api.get('/me')
-      setProtectedData(data)
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch protected data')
-    }
-  }
-
-  if (loading) {
-    return <div className="container">Loading...</div>
-  }
+// Public Home Page
+function HomePage() {
+  const { isAuthenticated, login, user } = useAuth();
 
   return (
-    <div className="container">
-      <h1>🏥 NearbyNurse Auth Demo</h1>
+    <div>
+      <h1>🏥 NearbyNurse - Home</h1>
+      <p>Welcome to NearbyNurse application</p>
 
-      {!isSupabaseConfigured && (
-        <div className="setup-banner">
-          <h3>⚠️ Supabase Not Configured</h3>
-          <p>To enable authentication, you need to set up Supabase:</p>
-          <ol style={{ textAlign: 'left', margin: '1rem auto', maxWidth: '500px' }}>
-            <li>Go to <a href="https://app.supabase.com" target="_blank" rel="noopener noreferrer">app.supabase.com</a></li>
-            <li>Create a new project (takes 2-3 minutes)</li>
-            <li>Go to Settings → API</li>
-            <li>Copy your Project URL and anon public key</li>
-            <li>Update <code>/Users/talhazia/WebstormProjects/nearbynurse/.env</code></li>
-            <li>Run: <code>docker-compose up -d --build frontend</code></li>
-          </ol>
-          <p style={{ fontSize: '0.9rem', marginTop: '1rem' }}>
-            📖 See <strong>SUPABASE-SETUP.md</strong> for detailed instructions
-          </p>
-        </div>
-      )}
-
-      {!user ? (
-        <div className="auth-form">
-          <h2>{isSignUp ? 'Sign Up' : 'Sign In'}</h2>
-          <form onSubmit={handleAuth}>
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-            />
-            <button type="submit">
-              {isSignUp ? 'Sign Up' : 'Sign In'}
-            </button>
-          </form>
-
-          {error && <p className="error">{error}</p>}
-
-          <button
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="toggle-btn"
-          >
-            {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
-          </button>
+      {!isAuthenticated ? (
+        <div>
+          <p>Please log in to access protected features.</p>
+          <button onClick={login}>Login with Keycloak</button>
         </div>
       ) : (
-        <div className="user-info">
-          <h2>Welcome! 👋</h2>
-          <p><strong>Email:</strong> {user.email}</p>
-          <p><strong>User ID:</strong> {user.id}</p>
-
-          <div className="actions">
-            <button onClick={testProtectedEndpoint}>
-              Test Protected Endpoint (/me)
-            </button>
-            <button onClick={signOut} className="signout-btn">
-              Sign Out
-            </button>
-          </div>
-
-          {protectedData && (
-            <div className="protected-data">
-              <h3>Protected Data:</h3>
-              <pre>{JSON.stringify(protectedData, null, 2)}</pre>
-            </div>
-          )}
-
-          {error && <p className="error">{error}</p>}
+        <div>
+          <p>Welcome back, <strong>{user?.username}</strong>!</p>
+          <Link to="/dashboard">Go to Dashboard</Link>
         </div>
       )}
     </div>
-  )
+  );
 }
 
-export default App
+// Protected Dashboard
+function Dashboard() {
+  const { user, logout, hasRole } = useAuth();
+  const [profileData, setProfileData] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  const fetchProfile = async () => {
+    setProfileLoading(true);
+    setProfileError(null);
+    try {
+      const data = await api.get('/me');
+      setProfileData(data);
+    } catch (e: any) {
+      setProfileError(e.message || 'Failed to fetch /me');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h1>📊 Dashboard</h1>
+      <p>This is a protected page. Only authenticated users can see this.</p>
+
+      <div style={{
+        background: '#f5f5f5',
+        padding: '1rem',
+        borderRadius: '8px',
+        marginTop: '1rem'
+      }}>
+        <h3>User Information</h3>
+        <p><strong>Username:</strong> {user?.username}</p>
+        <p><strong>Email:</strong> {user?.email}</p>
+        <p><strong>First Name:</strong> {user?.firstName || 'N/A'}</p>
+        <p><strong>Last Name:</strong> {user?.lastName || 'N/A'}</p>
+
+        <h4>Roles:</h4>
+        <ul>
+          {user?.roles.map((role) => (
+            <li key={role}>{role}</li>
+          ))}
+        </ul>
+
+        {hasRole('admin') && (
+          <div style={{
+            background: '#ffeb3b',
+            padding: '0.5rem',
+            borderRadius: '4px',
+            marginTop: '1rem'
+          }}>
+            👑 You have admin privileges!
+            <br />
+            <Link to="/admin">Go to Admin Panel</Link>
+          </div>
+        )}
+
+        <div style={{ marginTop: '1rem' }}>
+          <button onClick={fetchProfile} disabled={profileLoading} style={{
+            background: '#1976d2',
+            color: 'white',
+            border: 'none',
+            padding: '0.5rem 0.85rem',
+            borderRadius: 4,
+            cursor: 'pointer'
+          }}>
+            {profileLoading ? 'Loading /me...' : 'Call /me endpoint'}
+          </button>
+        </div>
+
+        {profileError && (
+          <p style={{ color: 'red', marginTop: '0.5rem' }}>{profileError}</p>
+        )}
+
+        {profileData && (
+          <div style={{
+            background: 'white',
+            marginTop: '1rem',
+            padding: '0.75rem',
+            border: '1px solid #ccc',
+            borderRadius: 6,
+            fontFamily: 'monospace',
+            fontSize: '0.85rem'
+          }}>
+            <strong>/me response:</strong>
+            <pre style={{ margin: 0 }}>{JSON.stringify(profileData, null, 2)}</pre>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: '1rem' }}>
+        <Link to="/">Home</Link> | <button onClick={logout}>Logout</button>
+      </div>
+    </div>
+  );
+}
+
+// Admin-Only Page
+function AdminPage() {
+  const { user, logout } = useAuth();
+
+  return (
+    <div>
+      <h1>👑 Admin Panel</h1>
+      <p>This page requires the 'admin' role.</p>
+
+      <div style={{
+        background: '#e8f5e9',
+        padding: '1rem',
+        borderRadius: '8px',
+        marginTop: '1rem'
+      }}>
+        <h3>Admin Tools</h3>
+        <p>Welcome, Administrator <strong>{user?.username}</strong></p>
+        <p>Here you can manage users, settings, and system configuration.</p>
+      </div>
+
+      <div style={{ marginTop: '1rem' }}>
+        <Link to="/dashboard">Dashboard</Link> |
+        <Link to="/">Home</Link> |
+        <button onClick={logout}>Logout</button>
+      </div>
+    </div>
+  );
+}
+
+// Main App Component
+function App() {
+  const { isLoading, isAuthenticated, user, login, logout, register } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh'
+      }}>
+        <div>Loading authentication...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app">
+      <nav style={{
+        background: '#1976d2',
+        color: 'white',
+        padding: '1rem',
+        marginBottom: '2rem'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          maxWidth: '1200px',
+          margin: '0 auto'
+        }}>
+          <div>
+            <Link to="/" style={{ color: 'white', textDecoration: 'none', fontWeight: 'bold' }}>
+              🏥 NearbyNurse
+            </Link>
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            {isAuthenticated ? (
+              <>
+                <Link to="/dashboard" style={{ color: 'white' }}>Dashboard</Link>
+                <span style={{ color: 'white' }}>{user?.username}</span>
+                <button onClick={logout} style={{
+                  background: 'white',
+                  color: '#1976d2',
+                  border: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}>
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" style={{
+                  background: 'white',
+                  color: '#1976d2',
+                  textDecoration: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '4px'
+                }}>Login</Link>
+                <Link to="/register" style={{
+                  background: 'transparent',
+                  color: 'white',
+                  border: '1px solid white',
+                  textDecoration: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '4px'
+                }}>Register</Link>
+              </>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 1rem' }}>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute roles={['admin']}>
+                <AdminPage />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </div>
+    </div>
+  );
+}
+
+export default App;
