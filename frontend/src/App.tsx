@@ -60,15 +60,16 @@ function Dashboard() {
         background: '#f5f5f5',
         padding: '1rem',
         borderRadius: '8px',
-        marginTop: '1rem'
+        marginTop: '1rem',
+        color: '#666'
       }}>
-        <h3>User Information</h3>
+        <h3 style={{ color: '#666' }}>User Information</h3>
         <p><strong>Username:</strong> {user?.username}</p>
         <p><strong>Email:</strong> {user?.email}</p>
         <p><strong>First Name:</strong> {user?.firstName || 'N/A'}</p>
         <p><strong>Last Name:</strong> {user?.lastName || 'N/A'}</p>
 
-        <h4>Roles:</h4>
+        <h4 style={{ color: '#666' }}>Roles:</h4>
         <ul>
           {user?.roles.map((role) => (
             <li key={role}>{role}</li>
@@ -113,10 +114,11 @@ function Dashboard() {
             border: '1px solid #ccc',
             borderRadius: 6,
             fontFamily: 'monospace',
-            fontSize: '0.85rem'
+            fontSize: '0.85rem',
+            color: '#666'
           }}>
             <strong>/me response:</strong>
-            <pre style={{ margin: 0 }}>{JSON.stringify(profileData, null, 2)}</pre>
+            <pre style={{ margin: 0, color: '#666' }}>{JSON.stringify(profileData, null, 2)}</pre>
           </div>
         )}
       </div>
