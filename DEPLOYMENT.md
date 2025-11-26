@@ -8,7 +8,6 @@ This guide will walk you through deploying your full-stack application to Render
 
 - GitHub repository with your code
 - Render.com account (free tier available)
-- Supabase project configured
 
 ---
 
@@ -62,7 +61,6 @@ If you prefer to use Supabase's PostgreSQL:
 
    ```
    DATABASE_URL=<your-postgres-connection-string>
-   SUPABASE_JWKS_URL=https://your-project-id.supabase.co/auth/v1/keys
    PORT=3000
    NODE_ENV=production
    ```
@@ -91,8 +89,6 @@ If you prefer to use Supabase's PostgreSQL:
 
    ```
    VITE_API_URL=https://nearbynurse-backend.onrender.com
-   VITE_SUPABASE_URL=https://your-project-id.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-anon-key-here
    ```
 
 6. Click **Create Static Site**
@@ -365,4 +361,3 @@ To view workflow status:
 **Your app is now live! 🎉**
 
 Need help? Check the troubleshooting section or reach out to support.
-

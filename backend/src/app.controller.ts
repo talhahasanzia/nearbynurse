@@ -1,6 +1,6 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import { AppService } from './app.service';
-import { SupabaseAuthGuard } from './auth/supabase-auth.guard';
+import { KeycloakAuthGuard } from './auth/keycloak-auth.guard';
 
 @Controller()
 export class AppController {
@@ -11,9 +11,10 @@ export class AppController {
     return this.appService.getHello();
   }
 
-  @UseGuards(SupabaseAuthGuard)
+  @UseGuards(KeycloakAuthGuard)
   @Get('me')
-  getProfile() {
-    return { msg: 'Authenticated!' };
+  getProfile(@Req() req: any) {
+    // When authenticated via Keycloak, req.user will contain the token payload
+    return { user: req.user || null };
   }
 }

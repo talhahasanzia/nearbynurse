@@ -4,15 +4,11 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 
-# Accept build args for Vite environment variables
+# Accept build arg for Vite API URL
 ARG VITE_API_URL
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
 
-# Export them as environment variables for the build
+# Export API URL as environment variable for the build
 ENV VITE_API_URL=${VITE_API_URL}
-ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
 
 RUN npm run build
 

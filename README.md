@@ -1,22 +1,23 @@
 # NearbyNurse — Full Stack Application
 
-Full-stack application with React (Vite) frontend + NestJS backend + PostgreSQL + Supabase Auth. Everything runs in Docker for easy local development.
+Full-stack application with React (Vite) frontend + NestJS backend + PostgreSQL + Keycloak authentication. Everything runs in Docker for easy local development.
 
-**Status**: ✅ Fully operational with JWT authentication using HS256
+**Status**: ✅ Fully operational with Keycloak authentication
 
 ---
 
 ## Quick Summary
 
-- **Frontend**: React + Vite + TypeScript + Supabase Auth
-- **Backend**: NestJS + TypeScript + JWT verification
+- **Frontend**: React + Vite + TypeScript + Mock Auth System (UI only)
+- **Backend**: NestJS + TypeScript + Keycloak JWT Authentication
 - **Database**: PostgreSQL 16 (containerized)
-- **Authentication**: Supabase Auth with JWT tokens (HS256)
+- **Authentication**: Keycloak (OpenID Connect / OAuth 2.0)
 - **Deployment**: Docker Compose orchestration
 
 ### Ports
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:3000
+- Keycloak: http://localhost:8080
 - PostgreSQL: localhost:5432
 
 ### Requirements
@@ -35,8 +36,6 @@ Create `.env` in the project root (required for Docker builds):
 ```bash
 # Root .env file for Docker Compose build args
 VITE_API_URL=http://localhost:3000
-VITE_SUPABASE_URL=https://your-project-id.supabase.co
-VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
 
 ### 2. Configure Backend Environment
@@ -47,49 +46,18 @@ Create or update `backend/.env`:
 # Database connection
 DATABASE_URL=postgresql://postgres:password@db:5432/mydb
 
-# Supabase JWT Secret (IMPORTANT: Not JWKS URL)
-# Get this from: Supabase Dashboard → Settings → API → JWT Settings → JWT Secret
-SUPABASE_JWT_SECRET=your-jwt-secret-from-supabase-dashboard
-
-# Supabase Anon Key (for API calls to Supabase)
-SUPABASE_ANON_KEY=your-supabase-anon-key
-
 # Server configuration
 PORT=3000
 NODE_ENV=development
+
+# Keycloak authentication
+KEYCLOAK_ISSUER=http://localhost:8080/realms/master
 ```
 
-### 3. Get Your Supabase Credentials
-
-**Required values from Supabase Dashboard:**
-
-1. Go to https://app.supabase.com/project/YOUR_PROJECT_ID/settings/api
-2. Copy these values:
-   - **Project URL**: `https://xxxxx.supabase.co`
-   - **anon public key**: Long JWT token starting with `eyJhbG...`
-   - **JWT Secret**: From JWT Settings section (click eye icon to reveal)
-
-### 4. Update Environment Files
-
-**Root `.env`** (for Docker frontend builds):
-```env
-VITE_API_URL=http://localhost:3000
-VITE_SUPABASE_URL=https://your-project-id.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-**`backend/.env`** (for backend JWT verification):
-```env
-DATABASE_URL=postgresql://postgres:password@db:5432/mydb
-SUPABASE_JWT_SECRET=your-super-secret-jwt-token-here
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-PORT=3000
-```
-
-### 5. Start the Application
+### 3. Start the Application
 
 ```bash
-# Build and start all services
+# Build and start all services (includes Keycloak)
 docker-compose up --build -d
 
 # Check status
@@ -99,66 +67,66 @@ docker-compose ps
 docker-compose logs -f
 ```
 
-### 6. Access the Application
+**⏱️ Note:** Keycloak takes 30-60 seconds to start. Wait for it to be fully ready before testing.
+
+### 4. Setup Keycloak
+
+See **[KEYCLOAK-SETUP.md](./KEYCLOAK-SETUP.md)** for complete setup instructions including:
+- Accessing admin console (admin:admin)
+- Creating users
+- Configuring clients
+- Getting access tokens
+- Testing authentication
+
+### 5. Access the Application
 
 - **Frontend**: http://localhost:5173
-- **Backend**: http://localhost:3000
+- **Backend API**: http://localhost:3000
+- **Keycloak Admin**: http://localhost:8080
 - **Test endpoint**: http://localhost:3000/ (should return "Hello World!")
 
 ---
 
-## Important: JWT Configuration
+## Keycloak Authentication
 
-### ⚠️ Critical Note About JWT Verification
+### Backend Protection
 
-This application uses **HS256 (HMAC with SHA-256)** for JWT verification, NOT RS256 with JWKS.
+The backend uses Keycloak JWT authentication via Passport.js:
 
-**Why?** Supabase signs JWT tokens with HS256, which requires a **JWT Secret** (shared secret), not public/private key pairs (JWKS).
+- **Strategy**: `KeycloakJwtStrategy` validates JWT tokens against Keycloak's JWKS endpoint
+- **Guard**: `KeycloakAuthGuard` protects endpoints
+- **Roles**: `RolesGuard` enforces role-based access control
 
-### Configuration Required:
+### Protected Endpoints
 
-```env
-# ✅ CORRECT - Use JWT Secret
-SUPABASE_JWT_SECRET=your-jwt-secret-from-supabase
+**Authentication Required:**
+- `GET /me` - Returns authenticated user info
+- `GET /demo/protected` - Any authenticated user
 
-# ❌ WRONG - JWKS URL doesn't work with Supabase
-SUPABASE_JWKS_URL=https://project.supabase.co/auth/v1/keys
+**Role-Based:**
+- `GET /demo/admin-only` - Requires `admin` role
+
+### Testing with cURL
+
+```bash
+# Get token from Keycloak
+TOKEN=$(curl -s -X POST http://localhost:8080/realms/master/protocol/openid-connect/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=testuser" \
+  -d "password=password123" \
+  -d "grant_type=password" \
+  -d "client_id=nearbynurse-backend" \
+  | jq -r '.access_token')
+
+# Test protected endpoint
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/me
 ```
 
-### How It Works:
+### Frontend Integration
 
-1. User signs in → Supabase creates JWT signed with HS256
-2. Frontend receives JWT token
-3. Frontend sends JWT to backend in `Authorization: Bearer <token>` header
-4. Backend verifies JWT using `jwt.verify(token, SECRET, { algorithms: ['HS256'] })`
-5. If valid → Request proceeds; If invalid → 401 Unauthorized
-
----
-
-## Authentication Flow
-
-### Sign Up New User
-
-1. Open http://localhost:5173
-2. Click "Need an account? Sign Up"
-3. Enter email and password (min 6 characters)
-4. Click "Sign Up"
-5. Check your email for confirmation link
-6. Click confirmation link in email
-
-### Sign In
-
-1. Open http://localhost:5173
-2. Enter your email and password
-3. Click "Sign In"
-4. You should see welcome message with your email
-
-### Test Protected Endpoint
-
-After signing in:
-1. Click "Test Protected Endpoint (/me)" button
-2. Should display your user data in JSON format
-3. This proves JWT authentication is working correctly
+The frontend still uses mock authentication for UI development. To integrate real Keycloak authentication in React, see:
+- [Keycloak JS Documentation](https://www.keycloak.org/docs/latest/securing_apps/#_javascript_adapter)
+- Configure Keycloak client in admin console with redirect URIs
 
 ---
 
@@ -228,18 +196,15 @@ docker-compose down -v
 ### Public Endpoints
 
 - `GET /` - Health check, returns "Hello World!"
-
-### Protected Endpoints (Require JWT)
-
-- `GET /me` - Returns authenticated user information
+- `GET /me` - Mock authenticated endpoint (no authentication required)
 
 **Example:**
 ```bash
-# Without token (returns 401)
-curl http://localhost:3000/me
+# Health check
+curl http://localhost:3000/
 
-# With token (returns user data)
-curl -H "Authorization: Bearer YOUR_JWT_TOKEN" http://localhost:3000/me
+# Mock authenticated endpoint (always returns success)
+curl http://localhost:3000/me
 ```
 
 ---
@@ -302,49 +267,15 @@ docker-compose up -d --build frontend
 # 3. Or open in incognito/private window
 ```
 
-### Backend Returns 500 Error on /me Endpoint
+### Mock Authentication Not Working
 
-**Cause**: Missing or incorrect `SUPABASE_JWT_SECRET` in `backend/.env`.
-
-**Solution**:
-1. Go to Supabase Dashboard → Settings → API → JWT Settings
-2. Copy the **JWT Secret** (click eye icon to reveal)
-3. Update `backend/.env`:
-   ```env
-   SUPABASE_JWT_SECRET=your-actual-jwt-secret-here
-   ```
-4. Rebuild backend:
-   ```bash
-   docker-compose up -d --build backend
-   ```
-
-### Supabase Warning in Browser Console
-
-**Warning Message**:
-```
-⚠️  Supabase not configured properly!
-URL=https://placeholder.supabase.co
-```
-
-**Cause**: Using placeholder values instead of real Supabase credentials.
+**Issue**: Authentication pages show errors or don't respond.
 
 **Solution**:
-1. Update root `.env` file with real credentials
-2. Rebuild frontend:
-   ```bash
-   docker-compose up -d --build frontend
-   ```
-3. Hard refresh browser
-
-### Cannot Sign In After Signing Up
-
-**Cause**: Email not confirmed yet.
-
-**Solution**:
-1. Check your email for Supabase confirmation link
-2. Click the confirmation link
-3. Return to http://localhost:5173 and sign in
-4. Or manually confirm in Supabase Dashboard → Authentication → Users
+1. Check browser console for JavaScript errors
+2. Verify localStorage is enabled in your browser
+3. Try clearing localStorage: `localStorage.clear()` in DevTools console
+4. Hard refresh the page (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows/Linux)
 
 ### Database Connection Error
 
@@ -406,8 +337,7 @@ nearbynurse/
 │   │   ├── contexts/
 │   │   │   └── AuthContext.tsx  # Authentication context
 │   │   └── lib/
-│   │       ├── supabase.ts      # Supabase client config
-│   │       └── api.ts           # API client
+│   │       ├── api.ts           # API client
 │   └── .env                     # Frontend env (for local dev)
 │
 └── backend/                      # NestJS API
@@ -415,9 +345,7 @@ nearbynurse/
     ├── src/
     │   ├── main.ts              # App entry point
     │   ├── app.module.ts        # Root module
-    │   ├── app.controller.ts    # API endpoints
-    │   └── auth/
-    │       └── supabase-auth.guard.ts  # JWT verification
+    │   └── app.controller.ts    # API endpoints
     └── .env                     # Backend env (required)
 ```
 
@@ -428,15 +356,11 @@ nearbynurse/
 ### Root `.env` (Required for Docker)
 ```env
 VITE_API_URL=http://localhost:3000
-VITE_SUPABASE_URL=https://xxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbG...
 ```
 
 ### `backend/.env` (Required)
 ```env
 DATABASE_URL=postgresql://postgres:password@db:5432/mydb
-SUPABASE_JWT_SECRET=your-jwt-secret
-SUPABASE_ANON_KEY=eyJhbG...
 PORT=3000
 NODE_ENV=development
 ```
@@ -444,32 +368,9 @@ NODE_ENV=development
 ### `frontend/.env` (Optional, for local dev without Docker)
 ```env
 VITE_API_URL=http://localhost:3000
-VITE_SUPABASE_URL=https://xxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbG...
 ```
 
----
 
-## Security Notes
-
-### JWT Secret Security
-
-✅ **Safe Practices:**
-- JWT Secret only in `backend/.env` (never in frontend)
-- `.env` files in `.gitignore` (not committed to git)
-- Use HTTPS in production
-- Rotate secrets periodically
-
-❌ **Never Do:**
-- Expose JWT Secret in frontend code
-- Commit secrets to git
-- Log secrets in console
-- Send secrets in API responses
-
-### Supabase Keys
-
-- **anon key**: ✅ Safe to use in frontend (public key with limited permissions)
-- **service_role key**: ❌ Never use in frontend (full access, backend only)
 
 ---
 
@@ -479,9 +380,8 @@ VITE_SUPABASE_ANON_KEY=eyJhbG...
 
 Update production environment files with:
 - Real database connection strings
-- Production Supabase credentials
-- Secure JWT secrets (generate new ones)
-- HTTPS URLs for API and Supabase
+- HTTPS URLs for API
+- Production-ready configurations
 
 ### Build for Production
 
@@ -496,13 +396,12 @@ docker-compose -f docker-compose.prod.yml build
 ### Security Checklist
 
 - [ ] Use HTTPS for all connections
-- [ ] Set secure JWT secret (min 32 characters)
-- [ ] Enable Supabase Row Level Security (RLS)
 - [ ] Configure CORS properly in backend
 - [ ] Use environment-specific .env files
 - [ ] Enable rate limiting on API
 - [ ] Set up monitoring and logging
 - [ ] Regular security updates for dependencies
+- [ ] Implement proper authentication system for production
 
 ---
 
@@ -520,19 +419,18 @@ docker-compose -f docker-compose.prod.yml build
 ### Adding New API Endpoints
 
 1. Add route in `backend/src/app.controller.ts`
-2. Add `@UseGuards(SupabaseAuthGuard)` for protected routes
-3. Restart backend: `docker-compose restart backend`
-4. Test with curl or frontend
+2. Restart backend: `docker-compose restart backend`
+3. Test with curl or frontend
 
-### Testing Authentication
+### Testing Mock Authentication
 
 ```bash
-# Sign up via UI and get JWT token from browser DevTools
-# Copy the token from Application → Local Storage
+# Test public endpoints
+curl http://localhost:3000/
+curl http://localhost:3000/me
 
-# Test protected endpoint
-curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-     http://localhost:3000/me
+# Test frontend mock authentication
+# Open http://localhost:5173 and try signing up/in
 ```
 
 ---
@@ -569,7 +467,6 @@ docker-compose exec [service] sh
 
 ## Support & Resources
 
-- **Supabase Docs**: https://supabase.com/docs
 - **NestJS Docs**: https://docs.nestjs.com
 - **Vite Docs**: https://vitejs.dev
 - **Docker Docs**: https://docs.docker.com
@@ -582,7 +479,7 @@ docker-compose exec [service] sh
 
 ---
 
-**Current Status**: ✅ Fully operational with working authentication system using Supabase JWT (HS256) and protected API endpoints.
+**Current Status**: ✅ Fully operational with mock authentication system for UI development.
 
 ```json
 "dev": "vite --host 0.0.0.0"

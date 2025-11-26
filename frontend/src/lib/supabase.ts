@@ -1,11 +1,22 @@
-import { createClient } from '@supabase/supabase-js'
-import type { Session, User } from '@supabase/supabase-js'
+// Mock authentication types to replace Supabase types
+export interface User {
+  id: string
+  email?: string
+  user_metadata?: {
+    [key: string]: any
+  }
+  created_at?: string
+}
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+export interface Session {
+  access_token: string
+  refresh_token: string
+  expires_at?: number
+  user: User
+}
 
-// Minimal interface to satisfy TypeScript in other modules that consume `supabase`.
-interface MinimalSupabase {
+// Mock authentication client to replace Supabase
+interface MockAuthClient {
   auth: {
     getSession: () => Promise<{ data: { session: Session | null }; error: any }>
     getUser: () => Promise<{ data: { user: User | null }; error: any }>
@@ -16,61 +27,145 @@ interface MinimalSupabase {
       cb: (event: string, session: Session | null) => void,
     ) => { data: { subscription: { unsubscribe: () => void } } }
   }
-  from: (table: string) => { select: () => Promise<{ data: any; error: any }> }
 }
 
-// Helper function to check if Supabase credentials are valid (not placeholders)
-function isValidSupabaseConfig(url?: string, key?: string): boolean {
-  if (!url || !key) return false
-  // Check if values are placeholders
-  if (url.includes('placeholder') || key.includes('placeholder')) return false
-  if (url.includes('your-project-id') || key.includes('your-supabase-anon-key')) return false
-  // Check if URL looks like a valid Supabase URL
-  if (!url.startsWith('https://') || !url.includes('supabase.co')) return false
-  return true
-}
+// Mock localStorage-based session management
+const MOCK_SESSION_KEY = 'mock-auth-session'
 
-let supabase: MinimalSupabase
-
-if (isValidSupabaseConfig(supabaseUrl, supabaseAnonKey)) {
-  // create the real client when env vars are present
-  // We cast to `any` here and then provide a typed wrapper for the parts we use.
-  const real = createClient(supabaseUrl, supabaseAnonKey) as any
-  supabase = {
-    auth: {
-      getSession: () => real.auth.getSession(),
-      getUser: () => real.auth.getUser(),
-      signInWithPassword: (creds: { email: string; password: string }) => real.auth.signInWithPassword(creds),
-      signUp: (creds: { email: string; password: string }) => real.auth.signUp(creds),
-      signOut: () => real.auth.signOut(),
-      onAuthStateChange: (cb: (event: string, session: Session | null) => void) => real.auth.onAuthStateChange(cb),
-    },
-    from: (table: string) => ({ select: () => real.from(table).select() }),
-  }
-} else {
-  // Do NOT throw here — when building inside Docker without env vars the app will crash during module eval
-  // Provide a safe stub so the UI doesn't remain blank; warn the developer instead.
-  // eslint-disable-next-line no-console
-  console.warn(
-    '⚠️  Supabase not configured properly!\n' +
-    'Either VITE_SUPABASE_URL and/or VITE_SUPABASE_ANON_KEY are missing or contain placeholder values.\n' +
-    'Please update frontend/.env with your actual Supabase credentials from https://app.supabase.com/project/_/settings/api\n' +
-    'Current values: URL=' + supabaseUrl + ', Key=' + (supabaseAnonKey ? '[SET]' : '[MISSING]')
-  )
-
-  supabase = {
-    auth: {
-      getSession: async () => ({ data: { session: null }, error: null }),
-      getUser: async () => ({ data: { user: null }, error: null }),
-      signInWithPassword: async () => ({ data: null, error: new Error('Supabase not configured') }),
-      signUp: async () => ({ data: null, error: new Error('Supabase not configured') }),
-      signOut: async () => ({ error: null }),
-      // prefix with underscore to avoid 'declared but never used' errors
-      onAuthStateChange: (_cb: (event: string, session: Session | null) => void) => ({ data: { subscription: { unsubscribe: () => {} } } }),
-    },
-    from: () => ({ select: async () => ({ data: null, error: null }) }),
+function getMockSession(): Session | null {
+  try {
+    const stored = localStorage.getItem(MOCK_SESSION_KEY)
+    return stored ? JSON.parse(stored) : null
+  } catch {
+    return null
   }
 }
 
-export { supabase }
-export const isSupabaseConfigured = isValidSupabaseConfig(supabaseUrl, supabaseAnonKey)
+function setMockSession(session: Session | null): void {
+  if (session) {
+    localStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(session))
+  } else {
+    localStorage.removeItem(MOCK_SESSION_KEY)
+  }
+}
+
+// Create mock session
+function createMockSession(email: string): Session {
+  return {
+    access_token: `mock-token-${Date.now()}`,
+    refresh_token: `mock-refresh-${Date.now()}`,
+    expires_at: Date.now() + 3600000, // 1 hour
+    user: {
+      id: `mock-user-${email.replace('@', '-').replace('.', '-')}`,
+      email,
+      user_metadata: { email },
+      created_at: new Date().toISOString(),
+    }
+  }
+}
+
+// Auth state change listeners
+const authListeners: Array<(event: string, session: Session | null) => void> = []
+
+function notifyAuthListeners(event: string, session: Session | null) {
+  authListeners.forEach(listener => {
+    try {
+      listener(event, session)
+    } catch (error) {
+      console.error('Auth listener error:', error)
+    }
+  })
+}
+
+// Mock authentication implementation
+export const supabase: MockAuthClient = {
+  auth: {
+    async getSession() {
+      const session = getMockSession()
+      return { data: { session }, error: null }
+    },
+
+    async getUser() {
+      const session = getMockSession()
+      return { data: { user: session?.user || null }, error: null }
+    },
+
+    async signInWithPassword({ email, password }: { email: string; password: string }) {
+      // Simple mock validation
+      if (!email || !password) {
+        return { data: null, error: new Error('Email and password are required') }
+      }
+
+      if (password.length < 6) {
+        return { data: null, error: new Error('Password must be at least 6 characters') }
+      }
+
+      // Create mock session
+      const session = createMockSession(email)
+      setMockSession(session)
+
+      // Notify listeners
+      setTimeout(() => notifyAuthListeners('SIGNED_IN', session), 0)
+
+      console.info('🔒 Mock sign-in successful for:', email)
+      return { data: { user: session.user, session }, error: null }
+    },
+
+    async signUp({ email, password }: { email: string; password: string }) {
+      // Simple mock validation
+      if (!email || !password) {
+        return { data: null, error: new Error('Email and password are required') }
+      }
+
+      if (password.length < 6) {
+        return { data: null, error: new Error('Password must be at least 6 characters') }
+      }
+
+      // Create mock session (simulating auto sign-in after sign-up)
+      const session = createMockSession(email)
+      setMockSession(session)
+
+      // Notify listeners
+      setTimeout(() => notifyAuthListeners('SIGNED_UP', session), 0)
+
+      console.info('🔒 Mock sign-up successful for:', email)
+      return { data: { user: session.user, session }, error: null }
+    },
+
+    async signOut() {
+      setMockSession(null)
+
+      // Notify listeners
+      setTimeout(() => notifyAuthListeners('SIGNED_OUT', null), 0)
+
+      console.info('🔒 Mock sign-out successful')
+      return { error: null }
+    },
+
+    onAuthStateChange(callback: (event: string, session: Session | null) => void) {
+      authListeners.push(callback)
+
+      // Immediately call with current session
+      const currentSession = getMockSession()
+      setTimeout(() => callback('INITIAL_SESSION', currentSession), 0)
+
+      return {
+        data: {
+          subscription: {
+            unsubscribe: () => {
+              const index = authListeners.indexOf(callback)
+              if (index > -1) {
+                authListeners.splice(index, 1)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// Always configured in mock mode
+export const isSupabaseConfigured = true
+
+console.info('🔒 Using mock authentication system (Supabase removed)')
