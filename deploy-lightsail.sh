@@ -191,17 +191,33 @@ step_install_docker() {
 step_install_docker_compose() {
     print_header "Step 3: Installing Docker Compose"
 
-    # Install Docker Compose
-    sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    # Install Docker Compose V2 (plugin version with buildx support)
+    DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
+    mkdir -p $DOCKER_CONFIG/cli-plugins
+
+    # Download Docker Compose V2
+    sudo curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o $DOCKER_CONFIG/cli-plugins/docker-compose
 
     # Make it executable
-    sudo chmod +x /usr/local/bin/docker-compose
+    sudo chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
 
-    # Create symlink if needed
+    # Also install as standalone for backward compatibility
+    sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    sudo chmod +x /usr/local/bin/docker-compose
     sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
 
+    # Install Docker Buildx
+    print_info "Installing Docker Buildx..."
+    BUILDX_VERSION=$(curl -s https://api.github.com/repos/docker/buildx/releases/latest | grep 'tag_name' | cut -d '"' -f 4)
+    mkdir -p $DOCKER_CONFIG/cli-plugins
+    curl -SL "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" -o $DOCKER_CONFIG/cli-plugins/docker-buildx
+    chmod +x $DOCKER_CONFIG/cli-plugins/docker-buildx
+
+    # Initialize buildx
+    docker buildx version || print_warning "Buildx installation may need a new shell session"
+
     print_success "Docker Compose installed successfully"
-    docker-compose --version
+    docker-compose --version || docker compose version
 }
 
 ###############################################################################
@@ -364,12 +380,28 @@ EOF
 step_start_services() {
     print_header "Step 11: Building and Starting Docker Services"
 
-    cd "$PROJECT_DIR"
+    cd "$PROJECT_DIR" || {
+        print_error "Failed to change to project directory: $PROJECT_DIR"
+        exit 1
+    }
+
+    # Verify docker-compose.yml exists
+    if [ ! -f "docker-compose.yml" ]; then
+        print_error "docker-compose.yml not found in $PROJECT_DIR"
+        exit 1
+    fi
 
     print_info "This may take 3-5 minutes for the first build..."
+    print_info "Current directory: $(pwd)"
 
-    # Build and start services
-    docker-compose up -d --build
+    # Use docker compose (V2) if available, fallback to docker-compose
+    if docker compose version &> /dev/null; then
+        print_info "Using Docker Compose V2"
+        docker compose up -d --build
+    else
+        print_info "Using Docker Compose V1"
+        docker-compose up -d --build
+    fi
 
     print_success "Docker services started"
 }
@@ -386,14 +418,21 @@ step_wait_for_services() {
     print_info "Waiting for all services to pass health checks..."
     print_info "This may take 1-2 minutes (Keycloak takes longest)..."
 
+    # Determine which docker compose command to use
+    if docker compose version &> /dev/null; then
+        COMPOSE_CMD="docker compose"
+    else
+        COMPOSE_CMD="docker-compose"
+    fi
+
     # Wait up to 3 minutes for services to be healthy
     timeout=180
     elapsed=0
     interval=5
 
     while [ $elapsed -lt $timeout ]; do
-        healthy=$(docker-compose ps | grep -c "Up (healthy)" || true)
-        total=$(docker-compose ps | grep -c "Up" || true)
+        healthy=$($COMPOSE_CMD ps | grep -c "Up (healthy)" || true)
+        total=$($COMPOSE_CMD ps | grep -c "Up" || true)
 
         if [ $healthy -ge 4 ]; then
             print_success "All services are healthy!"
@@ -409,12 +448,12 @@ step_wait_for_services() {
 
     if [ $elapsed -ge $timeout ]; then
         print_warning "Timeout reached. Some services may still be starting."
-        print_info "Run 'docker-compose ps' to check status"
+        print_info "Run '$COMPOSE_CMD ps' to check status"
     fi
 
     # Show final status
     print_info "\nService Status:"
-    docker-compose ps
+    $COMPOSE_CMD ps
 }
 
 ###############################################################################
@@ -510,11 +549,11 @@ Keycloak Credentials:
 
 Project Directory: $PROJECT_DIR
 
-Useful Commands:
-  View logs:        docker-compose logs -f
-  Restart service:  docker-compose restart <service>
-  Stop all:         docker-compose down
-  Status:           docker-compose ps
+Useful Commands (use 'docker compose' or 'docker-compose'):
+  View logs:        docker compose logs -f
+  Restart service:  docker compose restart <service>
+  Stop all:         docker compose down
+  Status:           docker compose ps
 
 EOF
     echo -e "${NC}"
@@ -533,11 +572,11 @@ For production deployment, consider these security improvements:
 
 1. Change Keycloak Admin Password:
    - Edit backend/.env: KEYCLOAK_ADMIN_PASSWORD=YourStrongPassword
-   - Run: docker-compose up -d --build keycloak
+   - Run: docker compose up -d --build keycloak
 
 2. Change Database Passwords:
    - Edit docker-compose.yml with strong passwords
-   - Rebuild: docker-compose up -d --build
+   - Rebuild: docker compose up -d --build
 
 3. Set Up HTTPS/SSL:
    - Register a domain name
@@ -570,10 +609,17 @@ cleanup_on_error() {
     print_info "Check the error messages above"
     print_info "You can run this script again after fixing the issues"
 
+    # Determine which docker compose command to use
+    if docker compose version &> /dev/null; then
+        COMPOSE_CMD="docker compose"
+    else
+        COMPOSE_CMD="docker-compose"
+    fi
+
     # Show logs if Docker is running
-    if docker-compose ps > /dev/null 2>&1; then
+    if $COMPOSE_CMD ps > /dev/null 2>&1; then
         print_info "\nDocker service logs:"
-        docker-compose logs --tail=50
+        $COMPOSE_CMD logs --tail=50
     fi
 
     exit 1
