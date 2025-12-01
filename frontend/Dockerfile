@@ -4,11 +4,17 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 
-# Accept build arg for Vite API URL
+# Accept build args for Vite environment variables
 ARG VITE_API_URL
+ARG VITE_KEYCLOAK_URL
+ARG VITE_KEYCLOAK_REALM
+ARG VITE_KEYCLOAK_CLIENT_ID
 
-# Export API URL as environment variable for the build
+# Export environment variables for the build
 ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_KEYCLOAK_URL=${VITE_KEYCLOAK_URL}
+ENV VITE_KEYCLOAK_REALM=${VITE_KEYCLOAK_REALM}
+ENV VITE_KEYCLOAK_CLIENT_ID=${VITE_KEYCLOAK_CLIENT_ID}
 
 RUN npm run build
 
