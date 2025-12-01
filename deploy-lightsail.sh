@@ -27,7 +27,7 @@ NC='\033[0m' # No Color
 # Configuration
 GITHUB_REPO="https://github.com/talhahasanzia/nearbynurse.git"
 PROJECT_DIR="$HOME/nearbynurse"
-PUBLIC_IP="54.254.253.205"  # Hardcoded public IP
+PUBLIC_IP=""  # Will be set by user input or auto-detection
 
 ###############################################################################
 # Helper Functions
@@ -75,8 +75,29 @@ collect_env_variables() {
     print_info "Please provide the following configuration values."
     print_info "Press Enter to use default values shown in [brackets].\n"
 
+    # Public IP Configuration
+    echo -e "${BLUE}━━━ Public IP Configuration ━━━${NC}"
+
+    # Auto-detect current public IP
+    DETECTED_IP=$(curl -s http://checkip.amazonaws.com || curl -s http://ifconfig.me || echo "")
+
+    if [ -n "$DETECTED_IP" ]; then
+        print_info "Detected Public IP: $DETECTED_IP"
+        read -p "Public IP Address [$DETECTED_IP]: " INPUT_PUBLIC_IP
+        PUBLIC_IP=${INPUT_PUBLIC_IP:-$DETECTED_IP}
+    else
+        print_warning "Could not auto-detect public IP"
+        read -p "Public IP Address: " PUBLIC_IP
+        while [ -z "$PUBLIC_IP" ]; do
+            print_error "Public IP is required!"
+            read -p "Public IP Address: " PUBLIC_IP
+        done
+    fi
+
+    print_success "Using Public IP: $PUBLIC_IP"
+
     # Database Configuration
-    echo -e "${BLUE}━━━ Database Configuration ━━━${NC}"
+    echo -e "\n${BLUE}━━━ Database Configuration ━━━${NC}"
     read -p "PostgreSQL Password [password]: " DB_PASSWORD
     DB_PASSWORD=${DB_PASSWORD:-password}
 
@@ -133,6 +154,7 @@ collect_env_variables() {
     echo "Keycloak Client ID: ${KC_CLIENT_ID}"
     echo "API URL: ${API_URL}"
     echo "Public IP: ${PUBLIC_IP}"
+    echo ""
     echo ""
 
     read -p "Is this configuration correct? (y/n) [y]: " CONFIRM
@@ -256,14 +278,14 @@ step_clone_repository() {
 }
 
 ###############################################################################
-# Step 6: Get Public IP
+# Step 6: Confirm Public IP
 ###############################################################################
 
 step_get_public_ip() {
-    print_header "Step 6: Using Configured Public IP Address"
+    print_header "Step 6: Confirming Public IP Address"
 
     print_success "Public IP Address: $PUBLIC_IP"
-    print_info "Using hardcoded IP from configuration"
+    print_info "This IP will be used for all service configurations"
 
     export PUBLIC_IP
 }
@@ -660,8 +682,8 @@ EOF
     step_install_docker_compose
     step_install_git
     step_clone_repository
-    step_get_public_ip
     collect_env_variables
+    step_get_public_ip
     step_configure_docker_compose
     step_configure_nginx
     step_configure_backend
