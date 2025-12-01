@@ -1,6 +1,18 @@
 version: "3.9"
 
 services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+      - keycloak
+    restart: unless-stopped
+
   db:
     image: postgres:16
     environment:
@@ -36,12 +48,12 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_HTTP_PORT: 8080
-      KC_HOSTNAME: localhost
-      KC_HOSTNAME_PORT: 8080
+      KC_HOSTNAME: nearbynurse.local
+      KC_HOSTNAME_PORT: 80
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     depends_on:
       keycloak-db:
         condition: service_healthy
@@ -56,8 +68,8 @@ services:
     build: ./backend
     env_file:
       - ./backend/.env
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     depends_on:
       - db
       - keycloak
@@ -72,9 +84,9 @@ services:
     build:
       context: ./frontend
       args:
-        - VITE_API_URL=${VITE_API_URL:-http://localhost:3000}
-    ports:
-      - "5173:5173"
+        - VITE_API_URL=${VITE_API_URL:-/api}
+    expose:
+      - "5173"
     depends_on:
       - backend
     healthcheck:
