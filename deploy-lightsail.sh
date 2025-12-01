@@ -66,6 +66,92 @@ check_command() {
 }
 
 ###############################################################################
+# Interactive Environment Configuration
+###############################################################################
+
+collect_env_variables() {
+    print_header "Interactive Environment Configuration"
+
+    print_info "Please provide the following configuration values."
+    print_info "Press Enter to use default values shown in [brackets].\n"
+
+    # Database Configuration
+    echo -e "${BLUE}━━━ Database Configuration ━━━${NC}"
+    read -p "PostgreSQL Password [password]: " DB_PASSWORD
+    DB_PASSWORD=${DB_PASSWORD:-password}
+
+    read -p "Database Name [mydb]: " DB_NAME
+    DB_NAME=${DB_NAME:-mydb}
+
+    # Keycloak Database
+    echo -e "\n${BLUE}━━━ Keycloak Database ━━━${NC}"
+    read -p "Keycloak DB User [keycloak]: " KC_DB_USER
+    KC_DB_USER=${KC_DB_USER:-keycloak}
+
+    read -p "Keycloak DB Password [keycloak]: " KC_DB_PASSWORD
+    KC_DB_PASSWORD=${KC_DB_PASSWORD:-keycloak}
+
+    read -p "Keycloak DB Name [keycloak]: " KC_DB_NAME
+    KC_DB_NAME=${KC_DB_NAME:-keycloak}
+
+    # Keycloak Admin
+    echo -e "\n${BLUE}━━━ Keycloak Admin Credentials ━━━${NC}"
+    read -p "Keycloak Admin Username [admin]: " KC_ADMIN_USER
+    KC_ADMIN_USER=${KC_ADMIN_USER:-admin}
+
+    read -sp "Keycloak Admin Password [admin]: " KC_ADMIN_PASSWORD
+    echo ""
+    KC_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD:-admin}
+
+    # Application Configuration
+    echo -e "\n${BLUE}━━━ Application Configuration ━━━${NC}"
+    read -p "Backend Port [3000]: " BACKEND_PORT
+    BACKEND_PORT=${BACKEND_PORT:-3000}
+
+    read -p "Node Environment [production]: " NODE_ENV
+    NODE_ENV=${NODE_ENV:-production}
+
+    read -p "Keycloak Realm [master]: " KC_REALM
+    KC_REALM=${KC_REALM:-master}
+
+    read -p "Keycloak Client ID [nearbynurse-frontend]: " KC_CLIENT_ID
+    KC_CLIENT_ID=${KC_CLIENT_ID:-nearbynurse-frontend}
+
+    read -p "API URL [/api]: " API_URL
+    API_URL=${API_URL:-/api}
+
+    # Confirm configuration
+    echo -e "\n${YELLOW}━━━ Configuration Summary ━━━${NC}"
+    echo "Database Password: ${DB_PASSWORD}"
+    echo "Database Name: ${DB_NAME}"
+    echo "Keycloak DB User: ${KC_DB_USER}"
+    echo "Keycloak DB Name: ${KC_DB_NAME}"
+    echo "Keycloak Admin Username: ${KC_ADMIN_USER}"
+    echo "Backend Port: ${BACKEND_PORT}"
+    echo "Node Environment: ${NODE_ENV}"
+    echo "Keycloak Realm: ${KC_REALM}"
+    echo "Keycloak Client ID: ${KC_CLIENT_ID}"
+    echo "API URL: ${API_URL}"
+    echo "Public IP: ${PUBLIC_IP}"
+    echo ""
+
+    read -p "Is this configuration correct? (y/n) [y]: " CONFIRM
+    CONFIRM=${CONFIRM:-y}
+
+    if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
+        print_warning "Configuration cancelled. Restarting..."
+        collect_env_variables
+        return
+    fi
+
+    print_success "Configuration confirmed!"
+
+    # Export for use in other functions
+    export DB_PASSWORD DB_NAME KC_DB_USER KC_DB_PASSWORD KC_DB_NAME KC_ADMIN_USER KC_ADMIN_PASSWORD
+    export BACKEND_PORT NODE_ENV KC_REALM KC_CLIENT_ID API_URL
+}
+
+###############################################################################
 # Step 1: System Update
 ###############################################################################
 
@@ -167,11 +253,52 @@ step_get_public_ip() {
 }
 
 ###############################################################################
-# Step 7: Configure Nginx
+# Step 7: Configure Docker Compose Environment
+###############################################################################
+
+step_configure_docker_compose() {
+    print_header "Step 7: Configuring Docker Compose Environment"
+
+    cd "$PROJECT_DIR"
+
+    # Create docker-compose environment file
+    cat > .env.docker << EOF
+# Public IP Configuration
+PUBLIC_IP=${PUBLIC_IP}
+
+# Database Configuration
+DB_PASSWORD=${DB_PASSWORD}
+DB_NAME=${DB_NAME}
+
+# Keycloak Database Configuration
+KC_DB_NAME=${KC_DB_NAME}
+KC_DB_USER=${KC_DB_USER}
+KC_DB_PASSWORD=${KC_DB_PASSWORD}
+
+# Keycloak Admin Configuration
+KC_ADMIN_USER=${KC_ADMIN_USER}
+KC_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD}
+
+# Frontend Build Args
+VITE_API_URL=${API_URL}
+VITE_KEYCLOAK_URL=http://${PUBLIC_IP}/auth
+VITE_KEYCLOAK_REALM=${KC_REALM}
+VITE_KEYCLOAK_CLIENT_ID=${KC_CLIENT_ID}
+EOF
+
+    # Link it as the main .env for docker-compose
+    ln -sf .env.docker .env
+
+    print_success "Docker Compose environment configured"
+    print_info "Location: .env.docker (linked as .env)"
+}
+
+###############################################################################
+# Step 8: Configure Nginx
 ###############################################################################
 
 step_configure_nginx() {
-    print_header "Step 7: Configuring Nginx"
+    print_header "Step 8: Configuring Nginx"
 
     cd "$PROJECT_DIR"
 
@@ -185,52 +312,57 @@ step_configure_nginx() {
 }
 
 ###############################################################################
-# Step 8: Configure Backend Environment
+# Step 9: Configure Backend Environment
 ###############################################################################
 
 step_configure_backend() {
-    print_header "Step 8: Configuring Backend Environment"
+    print_header "Step 9: Creating Backend Environment File"
 
     cd "$PROJECT_DIR"
 
-    # Create backend/.env file
+    # Create backend/.env file with user-provided values
     cat > backend/.env << EOF
-DATABASE_URL=postgresql://postgres:password@db:5432/mydb
-PORT=3000
-NODE_ENV=production
-KEYCLOAK_ISSUER=http://$PUBLIC_IP/auth/realms/master
+DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@db:5432/${DB_NAME}
+PORT=${BACKEND_PORT}
+NODE_ENV=${NODE_ENV}
+KEYCLOAK_ISSUER=http://$PUBLIC_IP/auth/realms/${KC_REALM}
 KEYCLOAK_URL=http://keycloak:8080
-KEYCLOAK_CLIENT_ID=nearbynurse-frontend
-KEYCLOAK_ADMIN_USERNAME=admin
-KEYCLOAK_ADMIN_PASSWORD=admin
+KEYCLOAK_CLIENT_ID=${KC_CLIENT_ID}
+KEYCLOAK_ADMIN_USERNAME=${KC_ADMIN_USER}
+KEYCLOAK_ADMIN_PASSWORD=${KC_ADMIN_PASSWORD}
 EOF
 
-    print_success "Backend environment configured"
+    print_success "Backend environment file created"
     print_info "Location: backend/.env"
 }
 
 ###############################################################################
-# Step 9: Configure Root Environment
+# Step 10: Configure Frontend Environment
 ###############################################################################
 
 step_configure_root_env() {
-    print_header "Step 9: Configuring Root Environment"
+    print_header "Step 10: Creating Frontend Environment File"
 
     cd "$PROJECT_DIR"
 
-    # Create .env file
-    echo "VITE_API_URL=/api" > .env
+    # Create frontend/.env file with user-provided values
+    cat > frontend/.env << EOF
+VITE_API_URL=${API_URL}
+VITE_KEYCLOAK_URL=http://$PUBLIC_IP/auth
+VITE_KEYCLOAK_REALM=${KC_REALM}
+VITE_KEYCLOAK_CLIENT_ID=${KC_CLIENT_ID}
+EOF
 
-    print_success "Root environment configured"
-    print_info "Location: .env"
+    print_success "Frontend environment file created"
+    print_info "Location: frontend/.env"
 }
 
 ###############################################################################
-# Step 10: Build and Start Services
+# Step 11: Build and Start Services
 ###############################################################################
 
 step_start_services() {
-    print_header "Step 10: Building and Starting Docker Services"
+    print_header "Step 11: Building and Starting Docker Services"
 
     cd "$PROJECT_DIR"
 
@@ -243,11 +375,11 @@ step_start_services() {
 }
 
 ###############################################################################
-# Step 11: Wait for Services to be Healthy
+# Step 12: Wait for Services to be Healthy
 ###############################################################################
 
 step_wait_for_services() {
-    print_header "Step 11: Waiting for Services to be Healthy"
+    print_header "Step 12: Waiting for Services to be Healthy"
 
     cd "$PROJECT_DIR"
 
@@ -286,11 +418,11 @@ step_wait_for_services() {
 }
 
 ###############################################################################
-# Step 12: Display Keycloak Configuration Instructions
+# Step 13: Display Keycloak Configuration Instructions
 ###############################################################################
 
 step_keycloak_instructions() {
-    print_header "Step 12: Keycloak Configuration Required"
+    print_header "Step 13: Keycloak Configuration Required"
 
     echo -e "${YELLOW}"
     cat << EOF
@@ -328,11 +460,11 @@ EOF
 }
 
 ###############################################################################
-# Step 13: Verify Deployment
+# Step 14: Verify Deployment
 ###############################################################################
 
 step_verify_deployment() {
-    print_header "Step 13: Verifying Deployment"
+    print_header "Step 14: Verifying Deployment"
 
     print_info "Testing backend health endpoint..."
 
@@ -355,7 +487,7 @@ step_verify_deployment() {
 }
 
 ###############################################################################
-# Step 14: Display Access Information
+# Step 15: Display Access Information
 ###############################################################################
 
 step_display_access_info() {
@@ -389,7 +521,7 @@ EOF
 }
 
 ###############################################################################
-# Step 15: Display Security Recommendations
+# Step 16: Display Security Recommendations
 ###############################################################################
 
 step_security_recommendations() {
@@ -483,6 +615,8 @@ EOF
     step_install_git
     step_clone_repository
     step_get_public_ip
+    collect_env_variables
+    step_configure_docker_compose
     step_configure_nginx
     step_configure_backend
     step_configure_root_env
